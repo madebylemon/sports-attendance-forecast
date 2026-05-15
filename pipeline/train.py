@@ -33,6 +33,12 @@ def load_training_data() -> tuple:
 
     df = load_parquet(features_path)
 
+    if len(df) == 0:
+        logger.error("Features DataFrame is empty!")
+        logger.error("This means no FINISHED matches were found in the raw data.")
+        logger.error("Run: python -m pipeline.backfill --force to re-fetch historical data")
+        raise ValueError("Empty features DataFrame. Cannot train model on no data.")
+
     # Split: train on 2020-2023, validate on 2024
     train_df = df[df["season"].isin(settings.TRAIN_SEASONS)].copy()
     val_df = df[df["season"] == settings.VALIDATION_SEASON].copy()
@@ -41,6 +47,12 @@ def load_training_data() -> tuple:
         f"Train set: {len(train_df)} matches (seasons {settings.TRAIN_SEASONS})"
     )
     logger.info(f"Validation set: {len(val_df)} matches (season {settings.VALIDATION_SEASON})")
+
+    if len(train_df) == 0:
+        logger.error(f"No training data found for seasons {settings.TRAIN_SEASONS}")
+        logger.error("The raw CSV files may not have historical data.")
+        logger.error("This is expected on first run. Backfill historical seasons with: python -m pipeline.backfill")
+        raise ValueError("No training data available for model training.")
 
     return train_df, val_df
 

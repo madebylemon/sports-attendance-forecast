@@ -37,7 +37,9 @@ def backfill_season(
 
     if output_file.exists() and not force:
         logger.info(f"File {output_file} exists. Skipping (use --force to re-download)")
-        return pd.read_csv(output_file)
+        df = pd.read_csv(output_file)
+        df["date"] = pd.to_datetime(df["date"])
+        return df
 
     logger.info(f"Fetching matches for {league} {season}-{season + 1}...")
     response = fetch_matches(league=league, season=season)

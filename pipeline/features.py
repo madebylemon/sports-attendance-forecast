@@ -55,6 +55,16 @@ def engineer_features(matches: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with engineered features, only for FINISHED matches (no data leakage)
     """
+    if len(matches) == 0:
+        logger.warning("No match data provided")
+        return pd.DataFrame()
+
+    finished_matches = matches[matches["status"] == "FINISHED"]
+    if len(finished_matches) == 0:
+        logger.warning("No FINISHED matches found in data. Only SCHEDULED matches available.")
+        logger.warning("This is normal if running on fresh data. Historical data will have finished matches.")
+        return pd.DataFrame()
+
     features_list = []
 
     for idx, row in matches.iterrows():
