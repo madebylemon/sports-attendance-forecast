@@ -1,0 +1,165 @@
+---
+title: "Methodology"
+---
+
+## Why Forecast Attendance?
+
+Stadium attendance is a leading indicator for sports business operations:
+- **Revenue planning** for concessions, parking, and hospitality
+- **Broadcast scheduling** and commentary crew sizing
+- **Event operations** (parking, security, catering)
+- **Research**: Understand fan behavior, team performance correlation, seasonal patterns
+
+Modern soccer analytics relies on quantitative forecasting, yet attendance is surprisingly under-studied compared to match outcomes or player performance.
+
+---
+
+## Data Source
+
+- **API**: [football-data.org](https://www.football-data.org/) (free tier)
+- **League**: Premier League (20 teams, 38 matchdays per season)
+- **History**: 2020–21 through 2024–25 seasons (~1,900 matches)
+- **Limitation**: Free tier doesn't always include actual attendance; we estimate using stadium capacity (70% utilization baseline)
+
+This is a deliberate design choice documented transparently—most real-world ML projects work with imperfect data. The important thing is to acknowledge limitations and validate model performance despite them.
+
+---
+
+## Feature Engineering
+
+14 hand-crafted features capture team form, fixture prestige, and temporal factors:
+
+| Feature | Type | Rationale |
+|---|---|---|
+| `home_win_rate_last5` | % | Recent form is predictive of momentum and crowd confidence |
+| `away_win_rate_last5` | % | Away teams' recent success attracts traveling fans |
+| `home_goals_scored_avg` | # | Attacking teams draw larger crowds (entertaining football) |
+| `away_goals_conceded_avg` | # | Defensive vulnerability = more goals = more excitement |
+| `is_rivalry` | bool | Historic rivalries (Man Utd vs Man City, Arsenal vs Spurs) are high-draw events |
+| `matchday` | int | Late-season matches (playoffs) have higher urgency |
+| `days_since_last_home_game` | # | Rest/fatigue affects team performance visibility |
+| `season_progress` | 0-1 | Seasonal trend (opening vs. closing matches) |
+| `home_league_position` | 1-20 | Top-of-table matches attract more spectators |
+| `away_league_position` | 1-20 | Away team quality matters for appeal |
+| `position_gap` | # | Mismatches (1st vs. 20th) draw different crowds |
+| `is_weekend` | bool | Saturday/Sunday matches > midweek matches |
+| `month` | int | Seasonal variation (holidays, weather) |
+| `stadium_capacity` | # | Normalize by ground size |
+
+All features are engineered **before** match time (no data leakage).
+
+---
+
+## Model: LightGBM
+
+**Why LightGBM over alternatives?**
+
+- **ARIMA / Prophet**: Assumption of linear trend doesn't hold for attendance (multimodal, regime changes)
+- **Neural Networks**: Overkill for 1,900 training samples; LightGBM trains faster and is more interpretable
+- **LightGBM**: Gradient boosting handles non-linear feature interactions (e.g., rivalry + big matchday), trains quickly, produces feature importances
+
+**Hyperparameters**:
+```python
+n_estimators=500, learning_rate=0.05, max_depth=6,
+subsample=0.8, colsample_bytree=0.8
+```
+
+---
+
+## Backtesting Methodology
+
+**Rolling-origin evaluation** (no data leakage):
+- Train on seasons 2020, 2021 → Test on 2022
+- Train on seasons 2020, 2021, 2022 → Test on 2023
+- Train on seasons 2020, 2021, 2022, 2023 → Test on 2024
+
+This simulates real-world usage where we train on historical data and predict the future.
+
+**Metric: MAPE** (Mean Absolute Percentage Error)
+- More interpretable than RMSE for business stakeholders ("off by 10%")
+- Threshold: < 15% (reasonable for a difficult forecasting task)
+
+---
+
+## Known Limitations & Future Work
+
+### Known Limitations
+1. **Attendance data**: Free tier doesn't always report actual attendance; we use synthetic estimates
+2. **External factors**: COVID lockdowns (2020–21), fan boycotts, weather, injuries—not captured
+3. **Causality**: Features are correlates, not causes (e.g., large crowds enable big spending, not vice versa)
+4. **Temporal autocorrelation**: Matches aren't independent; seasonal patterns repeat
+
+### Future Improvements
+- **Injuries** via official team sheets (FBref API or web scraping)
+- **Weather** from Open-Meteo API (temperature, precipitation)
+- **Fixture congestion** (domestic cups, European competition)
+- **Expected goals (xG)** to proxy attacking quality
+- **Sentiment** from Twitter/X (NLP on match previews)
+- **Quantile regression** for tighter prediction intervals
+
+---
+
+## How to Run Locally
+
+```bash
+# Clone
+git clone https://github.com/madebylemon/sports-attendance-forecast
+cd sports-attendance-forecast
+
+# Setup
+pip install -r requirements.txt
+echo "FOOTBALL_DATA_API_KEY=your_key_here" > .env
+
+# Backfill data (~2 min)
+python -m pipeline.backfill
+
+# Engineer + train + forecast
+make pipeline
+
+# View dashboard
+quarto preview dashboard/
+```
+
+Or use Docker:
+```bash
+docker compose -f docker/docker-compose.yml build
+docker compose -f docker/docker-compose.yml run pipeline bash
+python -m pipeline.backfill && make pipeline
+```
+
+---
+
+## Architecture
+
+```
+API (football-data.org)
+    ↓ [backfill + refresh]
+Raw CSV (data/raw/)
+    ↓ [feature engineering]
+Parquet (data/processed/features.parquet)
+    ↓ [train]
+LightGBM model (data/processed/model.pkl) + MLflow runs
+    ↓ [forecast]
+Forecasts (data/processed/forecasts.parquet)
+    ↓ [Quarto render]
+Dashboard (GitHub Pages)
+```
+
+GitHub Actions orchestrates daily refreshes at 7am UTC. MLflow tracks all experiments in `mlruns/`.
+
+---
+
+## Questions?
+
+- **Issues**: [GitHub Issues](https://github.com/madebylemon/sports-attendance-forecast/issues)
+- **Contributing**: Contributions welcome! See README for contribution guidelines.
+- **Citation**: If you use this project in research, cite the repository (BibTeX below):
+
+```bibtex
+@software{sports_attendance_2025,
+  author = {madebylemon},
+  title = {Sports Attendance Forecast: End-to-End MLOps Pipeline},
+  year = {2025},
+  url = {https://github.com/madebylemon/sports-attendance-forecast}
+}
+```

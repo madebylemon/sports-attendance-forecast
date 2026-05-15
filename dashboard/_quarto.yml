@@ -1,0 +1,27 @@
+project:
+  type: website
+  output-dir: _site
+  execute-dir: file
+
+website:
+  title: "⚽ Sports Attendance Forecast"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Overview
+      - href: forecast.qmd
+        text: Forecasts
+      - href: monitoring.qmd
+        text: Model Health
+      - href: about.qmd
+        text: Methodology
+  page-footer:
+    center: "Updated daily via GitHub Actions | [Source code](https://github.com/madebylemon/sports-attendance-forecast)"
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    grid:
+      margin-width: 350px

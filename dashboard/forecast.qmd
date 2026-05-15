@@ -1,0 +1,83 @@
+---
+title: "Forecasts"
+format:
+  html:
+    page-layout: full
+---
+
+```{python}
+#| echo: false
+import pandas as pd
+import numpy as np
+import plotly.express as px
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
+
+data_dir = Path("../data/processed")
+
+try:
+    forecasts = pd.read_parquet(data_dir / "forecasts.parquet").copy()
+    forecasts["date"] = pd.to_datetime(forecasts["date"])
+    forecasts = forecasts.sort_values("date")
+except:
+    forecasts = pd.DataFrame()
+
+```
+
+## All Upcoming Fixtures
+
+```{python}
+#| echo: false
+if len(forecasts) > 0:
+    display_df = forecasts[[
+        "date", "home_team", "away_team", "matchday",
+        "predicted_attendance", "lower_bound", "upper_bound"
+    ]].copy()
+
+    display_df["date"] = display_df["date"].dt.strftime("%b %d, %Y")
+    display_df["predicted_attendance"] = display_df["predicted_attendance"].round(0).astype(int)
+    display_df["lower_bound"] = display_df["lower_bound"].round(0).astype(int)
+    display_df["upper_bound"] = display_df["upper_bound"].round(0).astype(int)
+    display_df.columns = ["Date", "Home Team", "Away Team", "Matchday", "Predicted", "Lower Bound", "Upper Bound"]
+
+    # Use itables for interactive table
+    from itables import show
+    show(display_df, maxRows=20)
+else:
+    print("No forecasts available")
+
+```
+
+## Attendance Forecast with Error Bars
+
+```{python}
+#| echo: false
+if len(forecasts) > 0:
+    plot_df = forecasts.copy()
+    plot_df["fixture"] = plot_df["home_team"] + " vs " + plot_df["away_team"]
+    plot_df = plot_df.sort_values("predicted_attendance", ascending=False).head(15)
+
+    fig = px.scatter(
+        plot_df,
+        x="fixture",
+        y="predicted_attendance",
+        error_y="upper_bound",
+        title="Attendance Forecasts with 80% Prediction Intervals (Top 15)",
+        labels={"predicted_attendance": "Predicted Attendance"},
+        hover_data={"date": True, "home_team": True}
+    )
+    fig.add_scatter(
+        x=plot_df["fixture"],
+        y=plot_df["lower_bound"],
+        mode='markers',
+        marker=dict(color='rgba(0,0,0,0)'),
+        showlegend=False,
+        name="Lower Bound"
+    )
+    fig.update_layout(height=500, xaxis_tickangle=-45)
+    fig.show()
+else:
+    print("No forecast data available")
+
+```

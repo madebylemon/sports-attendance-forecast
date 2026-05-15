@@ -1,0 +1,121 @@
+---
+title: "Overview"
+format:
+  html:
+    page-layout: full
+---
+
+```{python}
+#| echo: false
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+from datetime import datetime
+import warnings
+warnings.filterwarnings('ignore')
+
+# Settings
+data_dir = Path("../data/processed")
+
+# Try to load data
+try:
+    forecasts = pd.read_parquet(data_dir / "forecasts.parquet")
+    features = pd.read_parquet(data_dir / "features.parquet")
+except:
+    forecasts = pd.DataFrame()
+    features = pd.DataFrame()
+
+```
+
+## Key Metrics
+
+```{python}
+#| echo: false
+if len(forecasts) > 0:
+    num_fixtures = len(forecasts)
+    avg_attendance = forecasts["predicted_attendance"].mean()
+    max_attendance = forecasts["predicted_attendance"].max()
+    last_updated = forecasts["forecast_timestamp"].iloc[0] if len(forecasts) > 0 else "N/A"
+
+    col1, col2, col3, col4 = [None] * 4
+
+    print(f"""
+    - **Next {num_fixtures} Fixtures Forecasted** • Average: {avg_attendance:,.0f} • Peak: {max_attendance:,.0f}
+    - **Model:** LightGBM • **Last Updated:** {last_updated[:10]}
+    - **Features:** 14 engineered • **Seasons:** 2020-2024
+    """)
+else:
+    print("⏳ No forecasts yet. Run the pipeline to generate predictions.")
+
+```
+
+## Top 5 Highest-Attendance Fixtures
+
+```{python}
+#| echo: false
+if len(forecasts) > 0:
+    top_5 = forecasts.nlargest(5, "predicted_attendance")[
+        ["date", "home_team", "away_team", "predicted_attendance", "upper_bound"]
+    ].copy()
+    top_5["date"] = pd.to_datetime(top_5["date"]).dt.strftime("%b %d, %Y")
+    top_5["predicted_attendance"] = top_5["predicted_attendance"].round(0).astype(int)
+    top_5["upper_bound"] = top_5["upper_bound"].round(0).astype(int)
+    top_5.columns = ["Date", "Home", "Away", "Predicted", "Upper Bound"]
+
+    fig = go.Figure(data=[go.Table(
+        header=dict(values=list(top_5.columns), fill_color='#457B9D', font=dict(color='white')),
+        cells=dict(values=[top_5[col] for col in top_5.columns], fill_color='lavender')
+    )])
+    fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0))
+    fig.show()
+else:
+    print("No forecast data available")
+
+```
+
+## Recent Match Performance
+
+```{python}
+#| echo: false
+if len(features) > 10:
+    # Last 10 finished matches
+    recent = features.tail(10).copy()
+    recent["predicted_attendance"] = recent["attendance_pct"] * recent["stadium_capacity"]
+
+    fig = px.bar(recent, x="date", y="predicted_attendance",
+                 color="home_team", title="Attendance: Last 10 Matches",
+                 labels={"predicted_attendance": "Attendance", "date": "Date"},
+                 hover_data={"home_team": True, "away_team": True})
+    fig.update_layout(height=400, showlegend=False)
+    fig.show()
+else:
+    print("Not enough historical data yet")
+
+```
+
+## Team Average Forecasted Attendance
+
+```{python}
+#| echo: false
+if len(forecasts) > 0:
+    team_stats = []
+    for team in set(list(forecasts["home_team"]) + list(forecasts["away_team"])):
+        home_matches = forecasts[forecasts["home_team"] == team]
+        away_matches = forecasts[forecasts["away_team"] == team]
+        avg = (home_matches["predicted_attendance"].mean() if len(home_matches) > 0 else 0 +
+               away_matches["predicted_attendance"].mean() if len(away_matches) > 0 else 0) / 2
+        team_stats.append({"team": team, "avg_attendance": avg})
+
+    team_df = pd.DataFrame(team_stats).sort_values("avg_attendance", ascending=True).tail(10)
+
+    fig = px.barh(team_df, x="avg_attendance", y="team",
+                  title="Top 10 Teams by Avg. Forecasted Attendance",
+                  labels={"avg_attendance": "Average Attendance"})
+    fig.update_layout(height=400, showlegend=False)
+    fig.show()
+else:
+    print("No data available")
+
+```
