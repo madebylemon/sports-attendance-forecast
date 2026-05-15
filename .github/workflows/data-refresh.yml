@@ -7,10 +7,15 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write      # For git push
+      actions: read        # For pytest/actions
+      checks: write        # For test reporting
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,6 +47,7 @@ jobs:
         run: python -m pipeline.forecast || echo "Forecasting failed - model may not exist yet."
 
       - name: Run tests
+        if: hashFiles('data/processed/model.pkl') != ''
         run: pytest tests/ -v --tb=short
 
       - name: Commit and push changes
